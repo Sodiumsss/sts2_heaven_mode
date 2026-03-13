@@ -1,192 +1,245 @@
 using System;
-using System.Collections;
-using System.Linq;
-using Godot;
 using HarmonyLib;
+using Godot;
 using MegaCrit.Sts2.addons.mega_text;
+using MegaCrit.Sts2.Core.Entities.UI;
 using MegaCrit.Sts2.Core.Logging;
-using MegaCrit.Sts2.Core.Nodes.CommonUi;
+using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 
 namespace HeavenMode;
 
-[HarmonyPatch(typeof(NCharacterSelectScreen))]
+[HarmonyPatch(typeof(NAscensionPanel))]
 internal static class Patches_CharacterSelect
 {
-    private const string HeavenDescriptionPanelName = "HeavenDescriptionPanel";
-    private const string HeavenDescriptionLabelName = "HeavenDescriptionLabel";
-    private const float HeavenDescriptionGap = 60f;
+    private const int MaxHeavenLevel = 2;
+
+    private static readonly AccessTools.FieldRef<NAscensionPanel, int> MaxAscensionRef =
+        AccessTools.FieldRefAccess<NAscensionPanel, int>("_maxAscension");
+
+    private static readonly AccessTools.FieldRef<NAscensionPanel, bool> ArrowsVisibleRef =
+        AccessTools.FieldRefAccess<NAscensionPanel, bool>("_arrowsVisible");
+
+    private static readonly AccessTools.FieldRef<NAscensionPanel, NButton> LeftArrowRef =
+        AccessTools.FieldRefAccess<NAscensionPanel, NButton>("_leftArrow");
+
+    private static readonly AccessTools.FieldRef<NAscensionPanel, NButton> RightArrowRef =
+        AccessTools.FieldRefAccess<NAscensionPanel, NButton>("_rightArrow");
+
+    private static readonly AccessTools.FieldRef<NAscensionPanel, MegaLabel> AscensionLevelRef =
+        AccessTools.FieldRefAccess<NAscensionPanel, MegaLabel>("_ascensionLevel");
+
+    private static readonly AccessTools.FieldRef<NAscensionPanel, MegaRichTextLabel> InfoRef =
+        AccessTools.FieldRefAccess<NAscensionPanel, MegaRichTextLabel>("_info");
+
+    private static readonly AccessTools.FieldRef<NCharacterSelectScreen, StartRunLobby> LobbyRef =
+        AccessTools.FieldRefAccess<NCharacterSelectScreen, StartRunLobby>("_lobby");
+
+    private static readonly AccessTools.FieldRef<NCharacterSelectScreen, NAscensionPanel> ScreenAscensionPanelRef =
+        AccessTools.FieldRefAccess<NCharacterSelectScreen, NAscensionPanel>("_ascensionPanel");
 
     [HarmonyPostfix]
-    [HarmonyPatch("_Ready")]
-    private static void AfterReady(NCharacterSelectScreen __instance)
+    [HarmonyPatch(nameof(NAscensionPanel.SetAscensionLevel))]
+    private static void AfterSetAscensionLevel(NAscensionPanel __instance)
     {
         try
         {
-            InjectHeavenDropdown(__instance);
+            if (__instance.Ascension > 0 && HeavenState.SelectedOption != 0)
+            {
+                HeavenState.SelectedOption = 0;
+                PersistPreferredHeaven(__instance, 0);
+                Log.Info("[HeavenMode] Cleared Heaven selection because official ascension is now above 0");
+            }
+
+            RefreshHeavenUi(__instance);
         }
         catch (Exception ex)
         {
-            Log.Error($"[HeavenMode] CharacterSelect patch failed: {ex}");
+            Log.Error($"[HeavenMode] AfterSetAscensionLevel failed: {ex}");
         }
     }
 
-    private static void InjectHeavenDropdown(NCharacterSelectScreen screen)
-    {
-        var template = ((Node)screen).GetNode<NActDropdown>("%ActDropdown");
-        if (template == null)
-        {
-            Log.Warn("[HeavenMode] ActDropdown template not found");
-            return;
-        }
-
-        // Duplicate the existing ActDropdown to reuse its full scene structure
-        if (template.Duplicate() is not Control heavenDropdown)
-        {
-            Log.Warn("[HeavenMode] Failed to duplicate ActDropdown");
-            return;
-        }
-        heavenDropdown.Name = "HeavenDropdown";
-        // Reset any position baked into the duplicate from the original scene node
-        // 34 = enlarged title font height (~22px) + 12px gap
-        heavenDropdown.Position = new Vector2(0, 34);
-
-        // Title label above the dropdown
-        var titleLabel = new Label();
-        titleLabel.Name = "HeavenTitle";
-        titleLabel.Text = Loc.Get("HEAVEN_TITLE", "Heaven");
-        titleLabel.AddThemeFontSizeOverride("font_size", 24);
-        titleLabel.Position = Vector2.Zero;
-
-        // Plain Control wrapper: children are positioned explicitly so layout never overlaps
-        var wrapper = new Control();
-        wrapper.Name = "HeavenDropdownWrapper";
-        wrapper.Position = new Vector2(200, 120);
-        wrapper.AddChild(titleLabel);
-        wrapper.AddChild(heavenDropdown);
-
-        ((Node)screen).AddChild(wrapper);
-
-        var descriptionPanel = CreateHeavenDescriptionPanel(screen);
-        if (descriptionPanel != null)
-            ((Node)screen).AddChild(descriptionPanel);
-
-        // Defer text fixup until after all child _Ready() calls have fired
-        Callable.From(() => FixupHeavenItems(screen, heavenDropdown)).CallDeferred();
-    }
-
-    private static Control? CreateHeavenDescriptionPanel(NCharacterSelectScreen screen)
-    {
-        var ascensionPanel = ((Node)screen).GetNodeOrNull<Control>("%AscensionPanel");
-        var template = ascensionPanel != null
-            ? ((Node)ascensionPanel).GetNodeOrNull<Control>("HBoxContainer/AscensionDescription")
-            : null;
-        if (template == null)
-        {
-            Log.Warn("[HeavenMode] AscensionDescription template not found");
-            return null;
-        }
-
-        if (template.Duplicate() is not Control panel)
-        {
-            Log.Warn("[HeavenMode] Failed to duplicate AscensionDescription template");
-            return null;
-        }
-
-        panel.Name = HeavenDescriptionPanelName;
-        panel.Position = GetHeavenDescriptionPosition(screen);
-        panel.Size = template.Size;
-        panel.Visible = false;
-        panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-
-        var description = ((Node)panel).FindChild("Description", true, false) as MegaRichTextLabel;
-        if (description == null)
-        {
-            Log.Warn("[HeavenMode] Duplicated Heaven description text node not found");
-            return null;
-        }
-
-        description.Name = HeavenDescriptionLabelName;
-        return panel;
-    }
-
-    private static Vector2 GetHeavenDescriptionPosition(NCharacterSelectScreen screen)
-    {
-        var ascensionPanel = ((Node)screen).GetNodeOrNull<Control>("%AscensionPanel");
-        if (ascensionPanel == null)
-            return new Vector2(1080, 720);
-
-        return ascensionPanel.Position + new Vector2(ascensionPanel.Size.X + HeavenDescriptionGap, 8f);
-    }
-
-    private static void FixupHeavenItems(NCharacterSelectScreen screen, Control dropdown)
+    [HarmonyPrefix]
+    [HarmonyPatch("DecrementAscension")]
+    private static bool BeforeDecrementAscension(NAscensionPanel __instance)
     {
         try
         {
-            var vbox = ((Node)dropdown).GetNodeOrNull<Control>("DropdownContainer/VBoxContainer");
-            if (vbox == null)
-            {
-                Log.Warn("[HeavenMode] DropdownContainer/VBoxContainer not found in heaven dropdown");
+            if (__instance.Ascension != 0)
+                return true;
+
+            if (HeavenState.SelectedOption >= MaxHeavenLevel)
+                return false;
+
+            HeavenState.SelectedOption += 1;
+            PersistPreferredHeaven(__instance, HeavenState.SelectedOption);
+            RefreshHeavenUi(__instance);
+            Log.Info($"[HeavenMode] Heaven option {HeavenState.SelectedOption} selected via ascension left arrow");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[HeavenMode] BeforeDecrementAscension failed: {ex}");
+            return true;
+        }
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch("IncrementAscension")]
+    private static bool BeforeIncrementAscension(NAscensionPanel __instance)
+    {
+        try
+        {
+            if (__instance.Ascension != 0 || HeavenState.SelectedOption <= 0)
+                return true;
+
+            HeavenState.SelectedOption -= 1;
+            PersistPreferredHeaven(__instance, HeavenState.SelectedOption);
+            RefreshHeavenUi(__instance);
+            Log.Info($"[HeavenMode] Heaven option {HeavenState.SelectedOption} selected via ascension right arrow");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[HeavenMode] BeforeIncrementAscension failed: {ex}");
+            return true;
+        }
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch("RefreshArrowVisibility")]
+    private static void AfterRefreshArrowVisibility(NAscensionPanel __instance)
+    {
+        try
+        {
+            if (__instance.Ascension != 0)
                 return;
-            }
 
-            var items = ((IEnumerable)vbox.GetChildren(false))
-                .OfType<NDropdownItem>()
-                .ToList();
+            bool arrowsVisible = ArrowsVisibleRef(__instance);
+            if (!arrowsVisible)
+                return;
 
-            if (items.Count >= 1) items[0].Text = Loc.Get("HEAVEN_OFF", "Off");
-            if (items.Count >= 2) items[1].Text = Loc.Get("HEAVEN_1", "1");
-            if (items.Count >= 3) items[2].Text = Loc.Get("HEAVEN_2", "2");
+            int maxAscension = MaxAscensionRef(__instance);
+            bool hasHeavenStepLeft = HeavenState.SelectedOption < MaxHeavenLevel;
+            bool canMoveRight = HeavenState.SelectedOption > 0 || maxAscension > 0;
 
-            // Connect each item's Selected signal to record the chosen option in HeavenState
-            for (int i = 0; i < items.Count; i++)
-            {
-                int captured = i;
-                ((GodotObject)items[i]).Connect(
-                    NDropdownItem.SignalName.Selected,
-                    Callable.From<NDropdownItem>(_ => {
-                        HeavenState.SelectedOption = captured;
-                        UpdateHeavenDescription(screen, captured);
-                        Log.Info($"[HeavenMode] Heaven option {captured} selected");
-                    })
-                );
-            }
-
-            // Reset the current-selection label on the button face to show "Off"
-            var labelNode = ((Node)dropdown).GetNodeOrNull("%Label");
-            labelNode?.Set("text", Loc.Get("HEAVEN_OFF", "Off"));
-            UpdateHeavenDescription(screen, 0);
+            ((Godot.CanvasItem)LeftArrowRef(__instance)).Visible = hasHeavenStepLeft;
+            ((Godot.CanvasItem)RightArrowRef(__instance)).Visible = canMoveRight;
         }
         catch (Exception ex)
         {
-            Log.Error($"[HeavenMode] FixupHeavenItems failed: {ex}");
+            Log.Error($"[HeavenMode] AfterRefreshArrowVisibility failed: {ex}");
         }
     }
 
-    private static void UpdateHeavenDescription(NCharacterSelectScreen screen, int option)
+    [HarmonyPostfix]
+    [HarmonyPatch("RefreshAscensionText")]
+    private static void AfterRefreshAscensionText(NAscensionPanel __instance)
     {
-        var panel = ((Node)screen).GetNodeOrNull<Control>(HeavenDescriptionPanelName);
-        if (panel == null)
+        try
         {
-            Log.Warn("[HeavenMode] Heaven description panel not found");
-            return;
-        }
-        var label = ((Node)panel).FindChild(HeavenDescriptionLabelName, true, false) as MegaRichTextLabel;
-        if (label == null)
-        {
-            Log.Warn("[HeavenMode] Heaven description label not found");
-            return;
-        }
+            if (__instance.Ascension != 0 || HeavenState.SelectedOption <= 0)
+                return;
 
-        panel.Position = GetHeavenDescriptionPosition(screen);
-        string description = option switch
+            AscensionLevelRef(__instance).SetTextAutoSize(HeavenState.SelectedOption.ToString());
+            InfoRef(__instance).Text =
+                $"[b][gold]{GetHeavenTitle(HeavenState.SelectedOption)}[/gold][/b]\n{GetHeavenDescription(HeavenState.SelectedOption)}";
+        }
+        catch (Exception ex)
         {
-            1 => $"[b][gold]{Loc.Get("HEAVEN_TITLE_1", "Human World") }[/gold][/b]\n{Loc.Get("HEAVEN_DESC_1", "Neow start: current HP becomes 10.")}",
-            2 => $"[b][gold]{Loc.Get("HEAVEN_TITLE_2", "Hell of Tongue Pulling") }[/gold][/b]\n{Loc.Get("HEAVEN_DESC_2", "Includes Heaven 1 effects.")}",
-            _ => string.Empty,
-        };
-
-        label.Text = description;
-        panel.Visible = !string.IsNullOrWhiteSpace(description);
+            Log.Error($"[HeavenMode] AfterRefreshAscensionText failed: {ex}");
+        }
     }
+
+    internal static void AfterSetSingleplayerAscensionAfterCharacterChanged(
+        StartRunLobby __instance,
+        ModelId characterId)
+    {
+        try
+        {
+            if (__instance.NetService.Type != NetGameType.Singleplayer)
+                return;
+
+            int restoredLevel = __instance.Ascension == 0
+                ? HeavenPersistence.LoadPreferredSelection(characterId)
+                : 0;
+
+            HeavenState.SelectedOption = Math.Clamp(restoredLevel, 0, MaxHeavenLevel);
+            Log.Info($"[HeavenMode] Restored preferred Heaven for {characterId}: level={HeavenState.SelectedOption}");
+
+            if (__instance.LobbyListener is not NCharacterSelectScreen screen)
+                return;
+
+            RefreshHeavenUi(ScreenAscensionPanelRef(screen));
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[HeavenMode] AfterSetSingleplayerAscensionAfterCharacterChanged failed: {ex}");
+        }
+    }
+
+    private static void RefreshHeavenUi(NAscensionPanel ascensionPanel)
+    {
+        ascensionPanel.CallDeferred(NAscensionPanel.MethodName.RefreshAscensionText);
+        ascensionPanel.CallDeferred(NAscensionPanel.MethodName.RefreshArrowVisibility);
+    }
+
+    private static void PersistPreferredHeaven(NAscensionPanel ascensionPanel, int heavenLevel)
+    {
+        try
+        {
+            if (!TryGetCurrentSingleplayerCharacterId(ascensionPanel, out ModelId characterId))
+                return;
+
+            HeavenPersistence.SavePreferredSelection(characterId, heavenLevel);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[HeavenMode] PersistPreferredHeaven failed: {ex}");
+        }
+    }
+
+    private static bool TryGetCurrentSingleplayerCharacterId(NAscensionPanel ascensionPanel, out ModelId characterId)
+    {
+        characterId = ModelId.none;
+
+        NCharacterSelectScreen? screen = FindCharacterSelectScreen(ascensionPanel);
+        if (screen == null)
+            return false;
+
+        StartRunLobby lobby = LobbyRef(screen);
+        if (lobby == null || lobby.NetService.Type != NetGameType.Singleplayer || lobby.LocalPlayer.character == null)
+            return false;
+
+        characterId = lobby.LocalPlayer.character.Id;
+        return true;
+    }
+
+    private static NCharacterSelectScreen? FindCharacterSelectScreen(Node node)
+    {
+        for (Node? current = node; current != null; current = current.GetParent())
+        {
+            if (current is NCharacterSelectScreen screen)
+                return screen;
+        }
+
+        return null;
+    }
+
+    private static string GetHeavenTitle(int level) => level switch
+    {
+        1 => Loc.Get("HEAVEN_TITLE_1", "Human World"),
+        2 => Loc.Get("HEAVEN_TITLE_2", "Hell of Tongue Pulling"),
+        _ => string.Empty,
+    };
+
+    private static string GetHeavenDescription(int level) => level switch
+    {
+        1 => Loc.Get("HEAVEN_DESC_1", "Heaven 1: when Neow starts, your current HP is set to 10."),
+        2 => Loc.Get("HEAVEN_DESC_2", "Heaven 2 includes Heaven 1 effects."),
+        _ => string.Empty,
+    };
 }

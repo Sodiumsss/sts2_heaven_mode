@@ -4,8 +4,10 @@
   "HEAVEN_OFF": "Off",
   "HEAVEN_1": "1",
   "HEAVEN_2": "2",
+  "HEAVEN_RUN_TITLE_1": "Heaven 1",
+  "HEAVEN_RUN_TITLE_2": "Heaven 2",
   "HEAVEN_TITLE_1": "Human World",
   "HEAVEN_TITLE_2": "Hell of Tongue Pulling",
-  "HEAVEN_DESC_1": "Heaven 1: when Neow starts, your current HP is set to 10.",
-  "HEAVEN_DESC_2": "TBD"
+  "HEAVEN_DESC_1": "Includes official Ascension 10 effects. When Neow starts, your current HP is set to 10.",
+  "HEAVEN_DESC_2": "Includes official Ascension 10 and Human World effects."
 }

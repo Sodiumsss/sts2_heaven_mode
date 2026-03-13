@@ -4,8 +4,10 @@
   "HEAVEN_OFF": "\u5728\u5929\u5802",
   "HEAVEN_1": "1",
   "HEAVEN_2": "2",
+  "HEAVEN_RUN_TITLE_1": "\u5929\u58021",
+  "HEAVEN_RUN_TITLE_2": "\u5929\u58022",
   "HEAVEN_TITLE_1": "\u4eba\u95f4\u70df\u706b",
   "HEAVEN_TITLE_2": "\u62d4\u820c\u5730\u72f1",
-  "HEAVEN_DESC_1": "\u8fdb\u5165 Neow \u65f6\uff0c\u5f53\u524d\u751f\u547d\u503c\u4f1a\u88ab\u8bbe\u4e3a 10\u3002",
-  "HEAVEN_DESC_2": "TBD"
+  "HEAVEN_DESC_1": "\u5305\u542b\u5b98\u65b9\u96be\u5ea6 10 \u6548\u679c\u3002\u8fdb\u5165 Neow \u65f6\uff0c\u5f53\u524d\u751f\u547d\u503c\u4f1a\u88ab\u8bbe\u4e3a 10\u3002",
+  "HEAVEN_DESC_2": "\u5305\u542b\u5b98\u65b9\u96be\u5ea6 10 \u4e0e\u300c\u4eba\u95f4\u70df\u706b\u300d\u6548\u679c\u3002"
 }

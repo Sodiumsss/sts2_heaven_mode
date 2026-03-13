@@ -7,6 +7,10 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
+using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Saves;
 
 namespace HeavenMode;
 
@@ -62,6 +66,49 @@ public static class ModEntry
             AccessTools.Method(typeof(AncientEventModel), "BeforeEventStarted"),
             AccessTools.Method(typeof(Patches_Player), "BeforeAncientEventStarted"),
             isPrefix: true);
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(RunState), nameof(RunState.CreateForNewRun)),
+            AccessTools.Method(typeof(Patches_RunStart), "BeforeCreateForNewRun"),
+            isPrefix: true);
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(RunManager), nameof(RunManager.SetUpNewSinglePlayer)),
+            AccessTools.Method(typeof(Patches_SaveAndLoad), "AfterSetUpNewSinglePlayer"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(RunManager), nameof(RunManager.SetUpNewMultiPlayer)),
+            AccessTools.Method(typeof(Patches_SaveAndLoad), "AfterSetUpNewMultiPlayer"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(SaveManager), nameof(SaveManager.SaveRun)),
+            AccessTools.Method(typeof(Patches_SaveAndLoad), "AfterSaveRun"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(RunManager), nameof(RunManager.SetUpSavedSinglePlayer)),
+            AccessTools.Method(typeof(Patches_SaveAndLoad), "BeforeSetUpSavedSinglePlayer"),
+            isPrefix: true);
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(RunManager), nameof(RunManager.SetUpSavedMultiPlayer)),
+            AccessTools.Method(typeof(Patches_SaveAndLoad), "BeforeSetUpSavedMultiPlayer"),
+            isPrefix: true);
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(NContinueRunInfo), "ShowInfo"),
+            AccessTools.Method(typeof(Patches_SaveAndLoad), "AfterContinueShowInfo"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(StartRunLobby), "SetSingleplayerAscensionAfterCharacterChanged"),
+            AccessTools.Method(typeof(Patches_CharacterSelect), "AfterSetSingleplayerAscensionAfterCharacterChanged"));
     }
 
     private static void TryPatch(Harmony harmony, MethodInfo? original, MethodInfo? patchMethod, bool isPrefix = false)
