@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MegaCrit.Sts2.Core.Logging;
 
 namespace HeavenMode;
@@ -18,6 +19,7 @@ internal static class HeavenConfig
 
     private sealed class ConfigData
     {
+        [JsonPropertyName("unlock")]
         public bool Unlock { get; set; }
     }
 
@@ -59,10 +61,12 @@ internal static class HeavenConfig
         {
             using JsonDocument jsonDocument = JsonDocument.Parse(File.ReadAllText(configPath));
             bool unlock = false;
-            if (jsonDocument.RootElement.TryGetProperty("unlock", out JsonElement value) &&
+            if (TryGetUnlockProperty(jsonDocument.RootElement, out JsonElement value) &&
                 (value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False))
             {
                 unlock = value.GetBoolean();
+                if (!jsonDocument.RootElement.TryGetProperty("unlock", out _))
+                    WriteConfig(configPath, new ConfigData { Unlock = unlock });
             }
             else
             {
@@ -99,6 +103,18 @@ internal static class HeavenConfig
     private static void WriteConfig(string configPath, ConfigData config)
     {
         File.WriteAllText(configPath, JsonSerializer.Serialize(config, WriteOptions));
+    }
+
+    private static bool TryGetUnlockProperty(JsonElement rootElement, out JsonElement value)
+    {
+        if (rootElement.TryGetProperty("unlock", out value))
+            return true;
+
+        if (rootElement.TryGetProperty(nameof(ConfigData.Unlock), out value))
+            return true;
+
+        value = default;
+        return false;
     }
 
     private static void BackupCorruptedConfig(string configPath)
