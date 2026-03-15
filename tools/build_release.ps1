@@ -42,11 +42,29 @@ Get-ChildItem -Path $buildRoot -Filter "HeavenMode-*.zip" -File -ErrorAction Sil
 Copy-Item $dllSource -Destination (Join-Path $releaseDir "HeavenMode.dll") -Force
 Copy-Item $pckSource -Destination (Join-Path $releaseDir "HeavenMode.pck") -Force
 
-$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+$manifestJson = [System.IO.File]::ReadAllText($manifestPath, [System.Text.Encoding]::UTF8)
+$manifest = $manifestJson | ConvertFrom-Json
 $version = [string]$manifest.version
 $modFolderName = if ([string]::IsNullOrWhiteSpace([string]$manifest.pck_name)) { [string]$manifest.name } else { [string]$manifest.pck_name }
 if ([string]::IsNullOrWhiteSpace($version)) { throw "mod_manifest.json missing version field" }
 if ([string]::IsNullOrWhiteSpace($modFolderName)) { throw "mod_manifest.json missing name/pck_name field" }
+
+Copy-Item $manifestPath -Destination (Join-Path $releaseDir "mod_manifest.json") -Force
+
+$newManifestPath = Join-Path $releaseDir "$modFolderName.json"
+$newManifest = [ordered]@{
+  id               = $modFolderName
+  name             = [string]$manifest.name
+  author           = [string]$manifest.author
+  description      = [string]$manifest.description
+  version          = [string]$manifest.version
+  has_pck          = $true
+  has_dll          = $true
+  dependencies     = @()
+  affects_gameplay = $true
+}
+$newManifestJson = $newManifest | ConvertTo-Json -Depth 3
+[System.IO.File]::WriteAllText($newManifestPath, $newManifestJson, [System.Text.UTF8Encoding]::new($false))
 
 $zipName = "HeavenMode-$version.zip"
 $zipPath = Join-Path $buildRoot $zipName
