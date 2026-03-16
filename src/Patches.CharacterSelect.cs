@@ -67,6 +67,7 @@ internal static class Patches_CharacterSelect
             {
                 HeavenState.SelectedOption = 0;
                 PersistPreferredHeaven(__instance, 0);
+                SyncMultiplayerHeavenSelection(__instance);
                 Log.Info("[HeavenMode] Cleared Heaven selection because official ascension is now above 0");
             }
 
@@ -96,6 +97,7 @@ internal static class Patches_CharacterSelect
             HeavenState.SelectedOption += 1;
             PersistPreferredHeaven(__instance, HeavenState.SelectedOption);
             RefreshHeavenUi(__instance);
+            SyncMultiplayerHeavenSelection(__instance);
             Log.Info($"[HeavenMode] Heaven option {HeavenState.SelectedOption} selected via ascension left arrow");
             return false;
         }
@@ -118,6 +120,7 @@ internal static class Patches_CharacterSelect
             HeavenState.SelectedOption -= 1;
             PersistPreferredHeaven(__instance, HeavenState.SelectedOption);
             RefreshHeavenUi(__instance);
+            SyncMultiplayerHeavenSelection(__instance);
             Log.Info($"[HeavenMode] Heaven option {HeavenState.SelectedOption} selected via ascension right arrow");
             return false;
         }
@@ -238,11 +241,43 @@ internal static class Patches_CharacterSelect
         }
     }
 
+    internal static void ApplySyncedHeavenLevel(NCharacterSelectScreen screen, int level)
+    {
+        try
+        {
+            NAscensionPanel ascensionPanel = ScreenAscensionPanelRef(screen);
+            HeavenState.SelectedOption = ascensionPanel.Ascension == 0
+                ? Math.Clamp(level, 0, HeavenState.MaxLevel)
+                : 0;
+            RefreshHeavenUi(ascensionPanel);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[HeavenMode] ApplySyncedHeavenLevel failed: {ex}");
+        }
+    }
+
     private static void RefreshHeavenUi(NAscensionPanel ascensionPanel)
     {
         ApplyHeavenFireVisuals(ascensionPanel);
         ascensionPanel.CallDeferred(NAscensionPanel.MethodName.RefreshAscensionText);
         ascensionPanel.CallDeferred(NAscensionPanel.MethodName.RefreshArrowVisibility);
+    }
+
+    private static void SyncMultiplayerHeavenSelection(NAscensionPanel ascensionPanel)
+    {
+        NCharacterSelectScreen? screen = FindCharacterSelectScreen(ascensionPanel);
+        if (screen == null)
+            return;
+
+        try
+        {
+            HeavenMultiplayerSync.BroadcastCurrentLevel(screen);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[HeavenMode] SyncMultiplayerHeavenSelection failed: {ex}");
+        }
     }
 
     private static void PersistPreferredHeaven(NAscensionPanel ascensionPanel, int heavenLevel)

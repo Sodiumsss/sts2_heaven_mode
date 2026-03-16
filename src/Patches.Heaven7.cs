@@ -46,22 +46,34 @@ internal static class Patches_Heaven7
             if (runState?.CurrentRoom is not CombatRoom)
                 return;
 
-            Player? localPlayer = LocalContext.GetMe(runState) ?? runState.Players.FirstOrDefault();
-            Creature? playerCreature = localPlayer?.Creature;
-            if (playerCreature == null || playerCreature.IsDead)
+            List<Player> livingPlayers = runState.Players
+                .Where(p => p.Creature != null && p.Creature.IsAlive)
+                .ToList();
+            if (livingPlayers.Count == 0)
                 return;
 
             int totalDamage = killedMonsterCount * DamagePerKill;
-            DamageResult result = playerCreature.LoseHpInternal(totalDamage, ValueProp.Unblockable | ValueProp.Unpowered);
-            if (result.UnblockedDamage <= 0)
-                return;
+            int totalHpLoss = 0;
+            foreach (Player player in livingPlayers)
+            {
+                Creature playerCreature = player.Creature;
+                DamageResult result = playerCreature.LoseHpInternal(totalDamage, ValueProp.Unblockable | ValueProp.Unpowered);
+                if (result.UnblockedDamage <= 0)
+                    continue;
 
-            PlayKillPunishFeedback(playerCreature, result);
+                totalHpLoss += result.UnblockedDamage;
+                PlayKillPunishFeedback(playerCreature, result);
 
-            if (result.WasTargetKilled && playerCreature.IsDead)
-                await CreatureCmd.Kill(playerCreature, true);
+                if (result.WasTargetKilled && playerCreature.IsDead)
+                    await CreatureCmd.Kill(playerCreature, true);
+            }
 
-            Log.Info($"[HeavenMode] Applied Heaven {HeavenState.SelectedOption} kill punishment for {killedMonsterCount} kill(s): hp loss {result.UnblockedDamage}");
+            if (totalHpLoss > 0)
+            {
+                Log.Info(
+                    $"[HeavenMode] Applied Heaven {HeavenState.SelectedOption} kill punishment for {killedMonsterCount} kill(s): " +
+                    $"hp loss {totalDamage} to each living player ({livingPlayers.Count} player(s))");
+            }
         }
         catch (Exception ex)
         {

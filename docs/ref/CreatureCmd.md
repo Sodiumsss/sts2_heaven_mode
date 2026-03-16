@@ -45,4 +45,10 @@ Current mod strategy in this repo:
 
 - patch `CreatureCmd.Kill(IReadOnlyCollection<Creature>, bool)` with a postfix
 - after the original kill flow finishes, count `creatures` where `IsMonster && IsDead`
-- apply `2` HP loss per killed monster to the local player
+- apply `2` HP loss per killed monster to every living player
+
+Multiplayer note:
+
+- do not target `LocalContext.GetMe(...)` here
+- in multiplayer, each peer has a different local player, which causes checksum divergence
+- applying the same punishment to the same set of players on every peer keeps combat state deterministic
