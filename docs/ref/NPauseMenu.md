@@ -19,7 +19,10 @@ Relevant vanilla methods:
 
 - Heaven 11 prefixes `NPauseMenu.OnSaveAndQuitButtonPressed(...)`.
 - When `HeavenState.SelectedOption >= 11`, the mod skips the vanilla `CloseToMenu()` path.
+- Before deleting any save, it opens the vanilla generic confirmation popup.
 - Instead it:
+  - creates `MegaCrit.Sts2.Core.Nodes.Multiplayer.NGenericPopup`
+  - uses its internal `NVerticalPopup` to show a custom title/body plus vanilla confirm/cancel buttons
   - waits for any in-flight run save to finish
   - deletes the current singleplayer or multiplayer run save through `SaveManager`
   - clears the Heaven current-run sidecar metadata
