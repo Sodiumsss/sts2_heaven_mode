@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
+using MegaCrit.Sts2.Core.Saves;
 
 namespace HeavenMode;
 
@@ -50,6 +51,9 @@ internal static class Patches_CharacterSelect
 
     private static readonly AccessTools.FieldRef<NAscensionPanel, ShaderMaterial> IconHsvRef =
         AccessTools.FieldRefAccess<NAscensionPanel, ShaderMaterial>("_iconHsv");
+
+    private static readonly AccessTools.FieldRef<NAscensionPanel, MultiplayerUiMode> ModeRef =
+        AccessTools.FieldRefAccess<NAscensionPanel, MultiplayerUiMode>("_mode");
 
     private static readonly AccessTools.FieldRef<NCharacterSelectScreen, StartRunLobby> LobbyRef =
         AccessTools.FieldRefAccess<NCharacterSelectScreen, StartRunLobby>("_lobby");
@@ -161,6 +165,14 @@ internal static class Patches_CharacterSelect
 
             if (!arrowsVisible)
             {
+                if (ModeRef(__instance) == MultiplayerUiMode.Client && HeavenState.SelectedOption > 0)
+                {
+                    bool showClientLeftArrow = HeavenState.SelectedOption < HeavenState.MaxLevel;
+                    bool showClientRightArrow = HeavenState.SelectedOption > 0;
+                    ((Godot.CanvasItem)leftArrow).Visible = showClientLeftArrow;
+                    ((Godot.CanvasItem)rightArrow).Visible = showClientRightArrow;
+                }
+
                 leftArrow.Disable();
                 rightArrow.Disable();
                 return;

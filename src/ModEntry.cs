@@ -11,6 +11,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 
@@ -237,6 +238,38 @@ public static class ModEntry
             harmony,
             AccessTools.Method(typeof(StartRunLobby), "SetSingleplayerAscensionAfterCharacterChanged"),
             AccessTools.Method(typeof(Patches_CharacterSelect), "AfterSetSingleplayerAscensionAfterCharacterChanged"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen.InitializeMultiplayerAsHost)),
+            AccessTools.Method(typeof(Patches_MultiplayerCharacterSelect), "AfterInitializeMultiplayerAsHost"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen.InitializeMultiplayerAsClient)),
+            AccessTools.Method(typeof(Patches_MultiplayerCharacterSelect), "AfterInitializeMultiplayerAsClient"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen.OnSubmenuOpened)),
+            AccessTools.Method(typeof(Patches_MultiplayerCharacterSelect), "AfterOnSubmenuOpened"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(NCharacterSelectScreen), nameof(NCharacterSelectScreen.PlayerConnected)),
+            AccessTools.Method(typeof(Patches_MultiplayerCharacterSelect), "AfterPlayerConnected"));
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(NCharacterSelectScreen), "CleanUpLobby"),
+            AccessTools.Method(typeof(Patches_MultiplayerCharacterSelect), "BeforeCleanUpLobby"),
+            isPrefix: true);
+
+        TryPatch(
+            harmony,
+            AccessTools.Method(typeof(StartRunLobby), "BeginRun"),
+            AccessTools.Method(typeof(Patches_MultiplayerLobby), "BeforeBeginRun"),
+            isPrefix: true);
 
         TryPatch(
             harmony,
