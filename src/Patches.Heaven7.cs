@@ -4,12 +4,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.Commands;
-using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
@@ -22,6 +22,7 @@ namespace HeavenMode;
 internal static class Patches_Heaven7
 {
     private const int DamagePerKill = 2;
+    private const int DoomAmountOnLethal = 3;
 
     private static bool _applyingPunishment;
 
@@ -58,6 +59,7 @@ internal static class Patches_Heaven7
 
             int totalDamage = killedMonsterCount * DamagePerKill;
             int totalHpLoss = 0;
+            int doomAppliedCount = 0;
 
             _applyingPunishment = true;
             try
@@ -65,6 +67,17 @@ internal static class Patches_Heaven7
                 foreach (Player player in livingPlayers)
                 {
                     Creature playerCreature = player.Creature;
+                    int effectiveSurvivability = playerCreature.CurrentHp + playerCreature.Block;
+                    if (effectiveSurvivability <= totalDamage)
+                    {
+                        await PowerCmd.Apply<DoomPower>(playerCreature, DoomAmountOnLethal, null, null);
+                        doomAppliedCount++;
+                        Log.Info(
+                            $"[HeavenMode] Heaven {HeavenState.SelectedOption} kill punishment converted lethal damage " +
+                            $"to {DoomAmountOnLethal} Doom for player {player.NetId} (hp={playerCreature.CurrentHp}, block={playerCreature.Block}, damage={totalDamage})");
+                        continue;
+                    }
+
                     int newHp = Math.Max(playerCreature.CurrentHp - totalDamage, 0);
                     int actualLoss = playerCreature.CurrentHp - newHp;
                     if (actualLoss <= 0)
@@ -72,12 +85,6 @@ internal static class Patches_Heaven7
 
                     totalHpLoss += actualLoss;
                     await CreatureCmd.SetCurrentHp(playerCreature, (decimal)newHp);
-                    if (playerCreature.IsDead)
-                    {
-                        // Ensure player-death cleanup is fully applied before checksums are generated.
-                        await CombatManager.Instance.HandlePlayerDeath(player);
-                    }
-
                     PlayKillPunishFeedback(playerCreature, actualLoss);
                 }
             }
@@ -91,6 +98,13 @@ internal static class Patches_Heaven7
                 Log.Info(
                     $"[HeavenMode] Applied Heaven {HeavenState.SelectedOption} kill punishment for {killedMonsterCount} kill(s): " +
                     $"hp loss {totalDamage} to each living player ({livingPlayers.Count} player(s))");
+            }
+
+            if (doomAppliedCount > 0)
+            {
+                Log.Info(
+                    $"[HeavenMode] Applied Heaven {HeavenState.SelectedOption} lethal fallback: " +
+                    $"{DoomAmountOnLethal} Doom to {doomAppliedCount} player(s)");
             }
         }
         catch (Exception ex)

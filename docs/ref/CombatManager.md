@@ -56,3 +56,9 @@ This is the vanilla cleanup path for a dead player during combat. It does three 
 - sets the player's `Stars` to `0`
 
 For Heaven 7, this matters because the kill-punishment damage can kill a player as a side effect of killing a monster. If the death cleanup is not finished before checksum generation, the most obvious divergence is usually `Energy` remaining non-zero on one peer.
+
+Practical note for this repo:
+
+- if Heaven 7 kills a player as a side effect of `CreatureCmd.Kill(...)`, relying only on the vanilla energy reset can still leave a peer with stale energy
+- do not manually call `HandlePlayerDeath(Player)` a second time from the mod after `CreatureCmd.SetCurrentHp(...)`, because that duplicates vanilla death cleanup
+- the current mod only force-normalizes `player.PlayerCombatState.Energy = 0` and `Stars = 0` after the vanilla death flow when the Heaven 7 punishment kills a player
