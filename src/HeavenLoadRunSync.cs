@@ -14,6 +14,7 @@ internal static class HeavenLoadRunSync
     {
         public required LoadRunLobby Lobby { get; init; }
         public required NMultiplayerLoadGameScreen Screen { get; set; }
+        public required int LoadedLevel { get; set; }
         public required MessageHandlerDelegate<LobbyHeavenLevelChangedMessage> HeavenChangedHandler { get; init; }
         public required MessageHandlerDelegate<LobbyHeavenLevelRequestMessage> HeavenRequestHandler { get; init; }
     }
@@ -32,17 +33,32 @@ internal static class HeavenLoadRunSync
             return;
         }
 
+        int loadedLevel = 0;
         if (lobby.NetService.Type == NetGameType.Host)
         {
-            int level = HeavenPersistence.LoadSelection(lobby.Run.StartTime);
-            HeavenState.SelectedOption = level;
-            Log.Info($"[HeavenMode] Restored Heaven level {level} for loaded multiplayer run startTime={lobby.Run.StartTime}");
+            loadedLevel = HeavenPersistence.LoadSelection(lobby.Run.StartTime);
+            if (loadedLevel == 0 && HeavenState.SelectedOption > 0)
+            {
+                // No persistence file (run predates the feature, or file was lost).
+                // The UI panel setup hasn't fired yet at postfix time, so SelectedOption
+                // still holds the correct in-memory level from the ongoing session.
+                loadedLevel = HeavenState.SelectedOption;
+                // Write it now so host restarts and future reconnects also work.
+                HeavenPersistence.SaveSelection(lobby.Run.StartTime, loadedLevel);
+                Log.Info($"[HeavenMode] No persistence file for startTime={lobby.Run.StartTime}; captured in-memory Heaven level {loadedLevel}");
+            }
+            else
+            {
+                Log.Info($"[HeavenMode] Restored Heaven level {loadedLevel} for loaded multiplayer run startTime={lobby.Run.StartTime}");
+            }
+            HeavenState.SelectedOption = loadedLevel;
         }
 
         Binding binding = new()
         {
             Lobby = lobby,
             Screen = screen,
+            LoadedLevel = loadedLevel,
             HeavenChangedHandler = (message, senderId) => HandleHeavenChanged(lobby, message, senderId),
             HeavenRequestHandler = (_, senderId) => HandleHeavenRequest(lobby, senderId),
         };
@@ -100,6 +116,8 @@ internal static class HeavenLoadRunSync
     {
         int level = Math.Clamp(message.HeavenLevel, 0, HeavenState.MaxLevel);
         HeavenState.SelectedOption = level;
+        if (Bindings.TryGetValue(lobby, out Binding? binding))
+            binding.LoadedLevel = level;
         Log.Info($"[HeavenMode] Received loaded-run Heaven level {level} from player {senderId}");
     }
 
@@ -113,9 +131,15 @@ internal static class HeavenLoadRunSync
 
     private static void SendCurrentLevel(LoadRunLobby lobby, ulong? targetPlayerId)
     {
+        // Use the level stored at registration time, not HeavenState.SelectedOption, which may have
+        // been cleared to 0 by AfterSetAscensionLevel firing during lobby UI updates.
+        int level = Bindings.TryGetValue(lobby, out Binding? binding)
+            ? binding.LoadedLevel
+            : HeavenState.SelectedOption;
+
         LobbyHeavenLevelChangedMessage message = new()
         {
-            HeavenLevel = Math.Clamp(HeavenState.SelectedOption, 0, HeavenState.MaxLevel),
+            HeavenLevel = Math.Clamp(level, 0, HeavenState.MaxLevel),
         };
 
         if (targetPlayerId.HasValue)
