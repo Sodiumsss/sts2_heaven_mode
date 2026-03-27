@@ -5,11 +5,10 @@ using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 
 namespace HeavenMode;
 
-[HarmonyPatch(typeof(StartRunLobby))]
+[HarmonyPatch(typeof(StartRunLobby), "BeginRunForAllPlayers")]
 internal static class Patches_MultiplayerLobby
 {
     [HarmonyPrefix]
-    [HarmonyPatch("BeginRun")]
     private static void BeforeBeginRun(StartRunLobby __instance)
     {
         try
